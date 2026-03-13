@@ -1,3 +1,12 @@
+/**
+ * SWMM INP Inspector extension entrypoint.
+ *
+ * This file intentionally keeps all logic in one place for maintainability in
+ * small extensions. The implementation is organized into three subsystems:
+ * 1) section parsing + sticky context symbols,
+ * 2) rainbow column decorations,
+ * 3) Ctrl/Cmd+click relation navigation (definition provider).
+ */
 const vscode = require("vscode");
 
 const SECTION_PATTERN = /^\s*\[([^\]]+)\]\s*$/;
@@ -20,6 +29,7 @@ const ENTITY_TYPES = Object.freeze({
   CURVE: "CURVE",
   PATTERN: "PATTERN"
 });
+// Sections whose first data column defines IDs for a canonical entity type.
 const DEFINITION_SECTION_TYPES = new Map([
   ["JUNCTIONS", ENTITY_TYPES.NODE],
   ["OUTFALLS", ENTITY_TYPES.NODE],
@@ -35,6 +45,7 @@ const DEFINITION_SECTION_TYPES = new Map([
   ["CURVES", ENTITY_TYPES.CURVE],
   ["PATTERNS", ENTITY_TYPES.PATTERN]
 ]);
+// [TAGS] first column values map to canonical entity categories.
 const TAG_TYPE_TO_ENTITY_TYPE = new Map([
   ["NODE", ENTITY_TYPES.NODE],
   ["JUNCTION", ENTITY_TYPES.NODE],
@@ -62,6 +73,9 @@ let refreshTimer;
 /** @type {Map<string, {version: number, analysis: DocumentAnalysis}>} */
 const analysisCache = new Map();
 
+/**
+ * Feeds Outline/Document Symbols and sticky-scroll section context.
+ */
 class SwmmSectionSymbolProvider {
   /**
    * @param {vscode.TextDocument} document
@@ -73,6 +87,9 @@ class SwmmSectionSymbolProvider {
   }
 }
 
+/**
+ * Enables folding by SWMM sections.
+ */
 class SwmmSectionFoldingProvider {
   /**
    * @param {vscode.TextDocument} document
@@ -93,6 +110,9 @@ class SwmmSectionFoldingProvider {
   }
 }
 
+/**
+ * Implements Ctrl/Cmd+click "Go to Definition" for SWMM cross references.
+ */
 class SwmmDefinitionProvider {
   /**
    * @param {vscode.TextDocument} document
@@ -119,6 +139,9 @@ class SwmmDefinitionProvider {
       return undefined;
     }
 
+    // Candidate resolution strategy:
+    // 1) use section/column-specific relation rules when available,
+    // 2) otherwise fall back to matching the token across all indexed entity types.
     const idKey = toIdentifierKey(token.value);
     const preferredEntityTypes = getReferenceEntityTypesForToken(row, tokenIndex);
     const isDefinitionToken =
@@ -136,6 +159,7 @@ class SwmmDefinitionProvider {
       candidates = getAllEntityLocations(analysis.entityIndexByType, idKey);
     }
 
+    // Do not navigate to the same token location the user clicked.
     const filtered = uniqueLocations(
       candidates.filter(
         (location) =>
@@ -209,6 +233,7 @@ function parseSections(document) {
 
   sections.forEach((section, index) => {
     const next = sections[index + 1];
+    // Section boundaries are derived from consecutive heading lines.
     section.endLine = next ? next.line - 1 : document.lineCount - 1;
     section.headerCommentLines = getHeaderCommentLines(document, section);
   });
@@ -337,6 +362,8 @@ function createSectionSymbol(document, section) {
     sectionSelectionRange
   );
 
+  // Build nested children for each immediate header comment line so VS Code
+  // sticky scroll can pin "[SECTION]" followed by those explanatory comments.
   let parent = sectionSymbol;
   for (const commentLine of section.headerCommentLines) {
     const commentText = document.lineAt(commentLine).text;
@@ -508,6 +535,9 @@ function buildDocumentAnalysis(document) {
   const rowsByLine = new Map();
   const entityIndexByType = createEntityIndex();
 
+  // Parse once per document version and build both:
+  // - line -> parsed row lookup (for hover position/token lookup),
+  // - entity indexes (for cross-reference resolution).
   for (const section of sections) {
     const sectionKey = section.name.toUpperCase();
     for (let line = section.line + 1; line <= section.endLine; line += 1) {
@@ -593,6 +623,8 @@ function getReferenceEntityTypesForToken(row, tokenIndex) {
   const sectionKey = row.sectionKey;
   const tokens = row.tokens;
 
+  // Token positions are based on SWMM section table conventions.
+  // If no case matches, caller falls back to broad ID matching.
   switch (sectionKey) {
     case "CONDUITS":
     case "PUMPS":
@@ -691,6 +723,8 @@ function buildRainbowRanges(paletteSize, document) {
     /** @type {{start: number, end: number}[]} */
     let tokens = [];
     if (headerCommentLines.has(line)) {
+      // For ";;Name   From Node   To Node" style lines, tokenization uses
+      // 2+ spaces as separators to preserve multi-word header labels.
       const header = stripLeadingCommentMarker(original);
       tokens = tokenizeHeaderColumns(header.content).map((token) => ({
         start: token.start + header.offset,
@@ -803,6 +837,7 @@ function scheduleRefresh() {
     clearTimeout(refreshTimer);
   }
 
+  // Debounce updates to avoid heavy re-decoration on rapid edits.
   refreshTimer = setTimeout(() => {
     refreshVisibleEditors();
   }, 100);
@@ -854,6 +889,7 @@ async function goToSection() {
 function activate(context) {
   recreateDecorationTypes();
 
+  // Core language features.
   context.subscriptions.push(
     vscode.languages.registerDocumentSymbolProvider(
       { language: "swmm-inp" },
@@ -872,6 +908,7 @@ function activate(context) {
       new SwmmDefinitionProvider()
     )
   );
+  // User-facing commands.
   context.subscriptions.push(
     vscode.commands.registerCommand("swmmInp.goToSection", goToSection)
   );
@@ -882,6 +919,7 @@ function activate(context) {
     )
   );
 
+  // Refresh hooks for editor/doc/config changes.
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor(scheduleRefresh)
   );
