@@ -13,9 +13,11 @@ It adds section-aware context, table-friendly coloring, and identifier occurrenc
 
 ## Tutorial video
 
-<video src="./media/tutorial.mp4" controls playsinline width="900"></video>
+<video src="https://raw.githubusercontent.com/ruozhoulin/vscode-swmm-inp-inspector/main/media/tutorial.mp4" controls playsinline width="900"></video>
 
-If your client does not render embedded MP4, open it directly: [Watch tutorial video](./media/tutorial.mp4).
+If your client does not render embedded MP4, use one of these links:
+- [Watch on GitHub](https://github.com/ruozhoulin/vscode-swmm-inp-inspector/blob/main/media/tutorial.mp4)
+- [Direct MP4 URL](https://raw.githubusercontent.com/ruozhoulin/vscode-swmm-inp-inspector/main/media/tutorial.mp4)
 
 ## Quick start
 
