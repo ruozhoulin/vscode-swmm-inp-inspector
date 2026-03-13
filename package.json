@@ -1,12 +1,21 @@
 {
   "name": "swmm-inp-inspector",
   "displayName": "SWMM INP Inspector",
-  "description": "Section-aware navigation, sticky context, and rainbow columns for SWMM .inp files.",
-  "version": "0.0.1",
-  "publisher": "local",
+  "description": "Inspect SWMM .inp files with sticky section headers, rainbow columns, and Ctrl+click relation navigation.",
+  "version": "0.1.0",
+  "publisher": "ruozhou",
+  "author": "Ruozhou Lin",
   "engines": {
     "vscode": "^1.86.0"
   },
+  "keywords": [
+    "swmm",
+    "inp",
+    "stormwater",
+    "hydrology",
+    "rainbow",
+    "navigation"
+  ],
   "categories": [
     "Programming Languages",
     "Other"
@@ -18,7 +27,8 @@
   ],
   "main": "./extension.js",
   "scripts": {
-    "check": "node --check extension.js"
+    "check": "node --check extension.js",
+    "package": "npx @vscode/vsce package"
   },
   "contributes": {
     "languages": [

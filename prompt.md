@@ -6,4 +6,4 @@
 
 - Each section it is usually in the format of a table. So I want to highlight different columns with different colors (just like the Rainbow CSV extensions). Normally, you can find headings of the table right below the section heading. Also, please highlight the text rather than the background.
 
-
+- Implement in-document navigation. For example. the F74F370_F74F360_l1 in the [CONDUITS] section is related to F74F370 and F74F360 in the [JUNCTIONS], [STORAGE], or [OUTFALLS], etc. So user should be able to jump from the conduit section to the node section at the corresponding node using Ctrl+click. There are also other similar relation existed in other sections.

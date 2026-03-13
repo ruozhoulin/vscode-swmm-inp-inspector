@@ -1,0 +1,11 @@
+.vscode/**
+.copilot/**
+.git/**
+.github/**
+node_modules/**
+bellinge.inp
+prompt.md
+*.log
+coverage/**
+dist/**
+out/**
