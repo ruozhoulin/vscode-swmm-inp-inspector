@@ -7,6 +7,14 @@
   "publisher": "ruozhou",
   "author": "Ruozhou Lin",
   "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ruozhou/vscode-swmm-inp-inspector.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ruozhou/vscode-swmm-inp-inspector/issues"
+  },
+  "homepage": "https://github.com/ruozhou/vscode-swmm-inp-inspector#readme",
   "engines": {
     "vscode": "^1.86.0"
   },
