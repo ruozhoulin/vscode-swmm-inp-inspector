@@ -1,10 +1,12 @@
 {
   "name": "swmm-inp-inspector",
   "displayName": "SWMM INP Inspector",
+  "icon": "media/logo_swmm.png",
   "description": "Inspect SWMM .inp files with sticky section headers, rainbow columns, and Ctrl/Cmd+click peek of all identifier occurrences.",
   "version": "0.1.0",
   "publisher": "ruozhou",
   "author": "Ruozhou Lin",
+  "license": "GPL-3.0-or-later",
   "engines": {
     "vscode": "^1.86.0"
   },

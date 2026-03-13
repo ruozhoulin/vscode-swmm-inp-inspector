@@ -71,6 +71,7 @@ If VS Code prompts to debug `Plain Text`, open this project folder and select th
 ## Packaging and publishing
 
 - Marketplace metadata lives in `package.json`.
+- Marketplace icon is configured by `icon` in `package.json` (current file: `media/logo-epa.png`).
 - Excluded package content is controlled by `.vscodeignore`.
 - Build a package with:
 
@@ -84,6 +85,11 @@ npm run package
 npx @vscode/vsce login <publisher-id>
 npx @vscode/vsce publish
 ```
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 or later (`GPL-3.0-or-later`).  
+See the `LICENSE` file for the full license text.
 
 ## Known limitations
 
