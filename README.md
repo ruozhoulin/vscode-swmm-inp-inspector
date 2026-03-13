@@ -11,6 +11,12 @@ It adds section-aware context, table-friendly coloring, and identifier occurrenc
 - Rainbow columns: table-like rows are tokenized by column and colored by token index (text color only, no background fill).
 - Peek occurrences on click: Ctrl/Cmd+click (Go to Definition) opens Peek with all in-file occurrences of the clicked identifier.
 
+## Tutorial video
+
+<video src="./media/tutorial.mp4" controls playsinline width="900"></video>
+
+If your client does not render embedded MP4, open it directly: [Watch tutorial video](./media/tutorial.mp4).
+
 ## Quick start
 
 1. Open a SWMM `.inp` file.
@@ -68,30 +74,11 @@ Press `F5` and select `Run SWMM INP Inspector` to start an Extension Development
 
 If VS Code prompts to debug `Plain Text`, open this project folder and select the extension-host launch profile in **Run and Debug**.
 
-## Packaging and publishing
-
-- Marketplace metadata lives in `package.json`.
-- Marketplace icon is configured by `icon` in `package.json` (current file: `media/logo-epa.png`).
-- Excluded package content is controlled by `.vscodeignore`.
-- Build a package with:
-
-```bash
-npm run package
-```
-
-- Publish with `vsce` (after publisher setup and login):
-
-```bash
-npx @vscode/vsce login <publisher-id>
-npx @vscode/vsce publish
-```
-
-## License
-
 This project is licensed under the GNU General Public License v3.0 or later (`GPL-3.0-or-later`).  
 See the `LICENSE` file for the full license text.
 
 ## Known limitations
 
 - Peek results are purely token-based occurrences in the current file (not semantic model validation).
+- Columns may not be colored properly if the section content is not a table or the number of space between headings is less than 2.
 - Very common identifiers (if clicked) can produce large peek result lists.
