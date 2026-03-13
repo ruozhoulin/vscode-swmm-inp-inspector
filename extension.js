@@ -1,11 +1,10 @@
 /**
  * SWMM INP Inspector extension entrypoint.
  *
- * This file intentionally keeps all logic in one place for maintainability in
- * small extensions. The implementation is organized into three subsystems:
+ * Subsystems in this file:
  * 1) section parsing + sticky context symbols,
  * 2) rainbow column decorations,
- * 3) Ctrl/Cmd+click relation navigation (definition provider).
+ * 3) Ctrl/Cmd+click peek-like identifier occurrences.
  */
 const vscode = require("vscode");
 
@@ -21,50 +20,6 @@ const DEFAULT_PALETTE = [
   "#C678DD",
   "#ABB2BF"
 ];
-const ENTITY_TYPES = Object.freeze({
-  NODE: "NODE",
-  LINK: "LINK",
-  SUBCATCH: "SUBCATCH",
-  RAINGAGE: "RAINGAGE",
-  CURVE: "CURVE",
-  PATTERN: "PATTERN"
-});
-// Sections whose first data column defines IDs for a canonical entity type.
-const DEFINITION_SECTION_TYPES = new Map([
-  ["JUNCTIONS", ENTITY_TYPES.NODE],
-  ["OUTFALLS", ENTITY_TYPES.NODE],
-  ["STORAGE", ENTITY_TYPES.NODE],
-  ["DIVIDERS", ENTITY_TYPES.NODE],
-  ["CONDUITS", ENTITY_TYPES.LINK],
-  ["PUMPS", ENTITY_TYPES.LINK],
-  ["ORIFICES", ENTITY_TYPES.LINK],
-  ["WEIRS", ENTITY_TYPES.LINK],
-  ["OUTLETS", ENTITY_TYPES.LINK],
-  ["SUBCATCHMENTS", ENTITY_TYPES.SUBCATCH],
-  ["RAINGAGES", ENTITY_TYPES.RAINGAGE],
-  ["CURVES", ENTITY_TYPES.CURVE],
-  ["PATTERNS", ENTITY_TYPES.PATTERN]
-]);
-// [TAGS] first column values map to canonical entity categories.
-const TAG_TYPE_TO_ENTITY_TYPE = new Map([
-  ["NODE", ENTITY_TYPES.NODE],
-  ["JUNCTION", ENTITY_TYPES.NODE],
-  ["OUTFALL", ENTITY_TYPES.NODE],
-  ["STORAGE", ENTITY_TYPES.NODE],
-  ["DIVIDER", ENTITY_TYPES.NODE],
-  ["LINK", ENTITY_TYPES.LINK],
-  ["CONDUIT", ENTITY_TYPES.LINK],
-  ["PUMP", ENTITY_TYPES.LINK],
-  ["ORIFICE", ENTITY_TYPES.LINK],
-  ["WEIR", ENTITY_TYPES.LINK],
-  ["OUTLET", ENTITY_TYPES.LINK],
-  ["SUBCATCH", ENTITY_TYPES.SUBCATCH],
-  ["SUBCATCHMENT", ENTITY_TYPES.SUBCATCH],
-  ["GAGE", ENTITY_TYPES.RAINGAGE],
-  ["RAINGAGE", ENTITY_TYPES.RAINGAGE],
-  ["CURVE", ENTITY_TYPES.CURVE],
-  ["PATTERN", ENTITY_TYPES.PATTERN]
-]);
 
 /** @type {vscode.TextEditorDecorationType[]} */
 let decorationTypes = [];
@@ -111,7 +66,11 @@ class SwmmSectionFoldingProvider {
 }
 
 /**
- * Implements Ctrl/Cmd+click "Go to Definition" for SWMM cross references.
+ * Returns all in-file occurrences of the clicked identifier.
+ *
+ * VS Code can present multiple returned definition locations in a Peek panel.
+ * We intentionally return all occurrences of the same token key, not only a
+ * single "definition" line, to support investigation of repeated references.
  */
 class SwmmDefinitionProvider {
   /**
@@ -126,55 +85,20 @@ class SwmmDefinitionProvider {
       return undefined;
     }
 
-    const tokenIndex = row.tokens.findIndex(
-      (token) =>
-        position.character >= token.start && position.character < token.end
+    const token = row.tokens.find(
+      (item) => position.character >= item.start && position.character < item.end
     );
-    if (tokenIndex < 0) {
+    if (!token || !isIdentifierValue(token.value)) {
       return undefined;
     }
 
-    const token = row.tokens[tokenIndex];
-    if (!isIdentifierValue(token.value)) {
-      return undefined;
-    }
-
-    // Candidate resolution strategy:
-    // 1) use section/column-specific relation rules when available,
-    // 2) otherwise fall back to matching the token across all indexed entity types.
     const idKey = toIdentifierKey(token.value);
-    const preferredEntityTypes = getReferenceEntityTypesForToken(row, tokenIndex);
-    const isDefinitionToken =
-      tokenIndex === 0 && DEFINITION_SECTION_TYPES.has(row.sectionKey);
-
-    /** @type {vscode.Location[]} */
-    let candidates = [];
-    if (preferredEntityTypes.length > 0) {
-      for (const entityType of preferredEntityTypes) {
-        candidates.push(
-          ...getEntityLocations(analysis.entityIndexByType, entityType, idKey)
-        );
-      }
-    } else if (!isDefinitionToken) {
-      candidates = getAllEntityLocations(analysis.entityIndexByType, idKey);
-    }
-
-    // Do not navigate to the same token location the user clicked.
-    const filtered = uniqueLocations(
-      candidates.filter(
-        (location) =>
-          !(
-            location.range.start.line === row.line &&
-            location.range.start.character === token.start &&
-            location.range.end.character === token.end
-          )
-      )
-    );
-    if (!filtered.length) {
+    const locations = uniqueLocations(analysis.occurrenceIndex.get(idKey) || []);
+    if (!locations.length) {
       return undefined;
     }
 
-    return filtered.length === 1 ? filtered[0] : filtered;
+    return locations;
   }
 }
 
@@ -195,8 +119,6 @@ class SwmmDefinitionProvider {
  */
 /**
  * @typedef {{
- *   sectionName: string,
- *   sectionKey: string,
  *   line: number,
  *   tokens: ParsedToken[]
  * }} ParsedRow
@@ -205,11 +127,13 @@ class SwmmDefinitionProvider {
  * @typedef {{
  *   sections: SectionInfo[],
  *   rowsByLine: Map<number, ParsedRow>,
- *   entityIndexByType: Map<string, Map<string, vscode.Location[]>>
+ *   occurrenceIndex: Map<string, vscode.Location[]>
  * }} DocumentAnalysis
  */
 
 /**
+ * Parse section headings and derive each section's line range.
+ *
  * @param {vscode.TextDocument} document
  * @returns {SectionInfo[]}
  */
@@ -233,7 +157,6 @@ function parseSections(document) {
 
   sections.forEach((section, index) => {
     const next = sections[index + 1];
-    // Section boundaries are derived from consecutive heading lines.
     section.endLine = next ? next.line - 1 : document.lineCount - 1;
     section.headerCommentLines = getHeaderCommentLines(document, section);
   });
@@ -242,79 +165,8 @@ function parseSections(document) {
 }
 
 /**
- * @returns {Map<string, Map<string, vscode.Location[]>>}
- */
-function createEntityIndex() {
-  return new Map([
-    [ENTITY_TYPES.NODE, new Map()],
-    [ENTITY_TYPES.LINK, new Map()],
-    [ENTITY_TYPES.SUBCATCH, new Map()],
-    [ENTITY_TYPES.RAINGAGE, new Map()],
-    [ENTITY_TYPES.CURVE, new Map()],
-    [ENTITY_TYPES.PATTERN, new Map()]
-  ]);
-}
-
-/**
- * @param {Map<string, Map<string, vscode.Location[]>>} entityIndexByType
- * @param {string} entityType
- * @param {string} idKey
- * @param {vscode.Location} location
- */
-function addEntityLocation(entityIndexByType, entityType, idKey, location) {
-  const index = entityIndexByType.get(entityType);
-  if (!index) {
-    return;
-  }
-  const existing = index.get(idKey) || [];
-  existing.push(location);
-  index.set(idKey, existing);
-}
-
-/**
- * @param {Map<string, Map<string, vscode.Location[]>>} entityIndexByType
- * @param {string} entityType
- * @param {string} idKey
- * @returns {vscode.Location[]}
- */
-function getEntityLocations(entityIndexByType, entityType, idKey) {
-  return entityIndexByType.get(entityType)?.get(idKey) || [];
-}
-
-/**
- * @param {Map<string, Map<string, vscode.Location[]>>} entityIndexByType
- * @param {string} idKey
- * @returns {vscode.Location[]}
- */
-function getAllEntityLocations(entityIndexByType, idKey) {
-  /** @type {vscode.Location[]} */
-  const all = [];
-  for (const index of entityIndexByType.values()) {
-    const matches = index.get(idKey);
-    if (matches) {
-      all.push(...matches);
-    }
-  }
-  return all;
-}
-
-/**
- * @param {vscode.Location[]} locations
- * @returns {vscode.Location[]}
- */
-function uniqueLocations(locations) {
-  const seen = new Set();
-  return locations.filter((location) => {
-    const key = `${location.range.start.line}:${location.range.start.character}:${location.range.end.character}`;
-    if (seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
-}
-
-/**
+ * Return consecutive comment lines directly below a section heading.
+ *
  * @param {vscode.TextDocument} document
  * @param {SectionInfo} section
  * @returns {number[]}
@@ -335,6 +187,11 @@ function getHeaderCommentLines(document, section) {
 }
 
 /**
+ * Build nested symbols:
+ * section symbol -> first header comment -> next header comment ...
+ *
+ * The nesting makes sticky-scroll show both section and explanatory comments.
+ *
  * @param {vscode.TextDocument} document
  * @param {SectionInfo} section
  * @returns {vscode.DocumentSymbol}
@@ -362,8 +219,6 @@ function createSectionSymbol(document, section) {
     sectionSelectionRange
   );
 
-  // Build nested children for each immediate header comment line so VS Code
-  // sticky scroll can pin "[SECTION]" followed by those explanatory comments.
   let parent = sectionSymbol;
   for (const commentLine of section.headerCommentLines) {
     const commentText = document.lineAt(commentLine).text;
@@ -394,6 +249,8 @@ function createSectionSymbol(document, section) {
 }
 
 /**
+ * Remove trailing inline comment content while respecting quotes.
+ *
  * @param {string} line
  * @returns {string}
  */
@@ -443,6 +300,8 @@ function isNumericValue(value) {
 }
 
 /**
+ * Excludes numeric-only tokens from identifier occurrence indexing.
+ *
  * @param {string} value
  * @returns {boolean}
  */
@@ -470,6 +329,8 @@ function stripLeadingCommentMarker(line) {
 }
 
 /**
+ * Tokenize unquoted rows by whitespace, keeping quoted strings as one token.
+ *
  * @param {string} line
  * @returns {{start: number, end: number}[]}
  */
@@ -491,7 +352,8 @@ function tokenizeColumns(line) {
 }
 
 /**
- * Tokenize table header comment lines where labels are separated by 2+ spaces.
+ * Tokenize header comments by 2+ spaces to preserve multi-word labels.
+ *
  * @param {string} line
  * @returns {{start: number, end: number}[]}
  */
@@ -513,6 +375,8 @@ function tokenizeHeaderColumns(line) {
 }
 
 /**
+ * Parse one data row into token values + positions.
+ *
  * @param {string} line
  * @returns {ParsedToken[]}
  */
@@ -526,6 +390,19 @@ function parseDataRowTokens(line) {
 }
 
 /**
+ * @param {Map<string, vscode.Location[]>} occurrenceIndex
+ * @param {string} idKey
+ * @param {vscode.Location} location
+ */
+function addOccurrence(occurrenceIndex, idKey, location) {
+  const existing = occurrenceIndex.get(idKey) || [];
+  existing.push(location);
+  occurrenceIndex.set(idKey, existing);
+}
+
+/**
+ * Build the per-document analysis snapshot used by all providers.
+ *
  * @param {vscode.TextDocument} document
  * @returns {DocumentAnalysis}
  */
@@ -533,13 +410,10 @@ function buildDocumentAnalysis(document) {
   const sections = parseSections(document);
   /** @type {Map<number, ParsedRow>} */
   const rowsByLine = new Map();
-  const entityIndexByType = createEntityIndex();
+  /** @type {Map<string, vscode.Location[]>} */
+  const occurrenceIndex = new Map();
 
-  // Parse once per document version and build both:
-  // - line -> parsed row lookup (for hover position/token lookup),
-  // - entity indexes (for cross-reference resolution).
   for (const section of sections) {
-    const sectionKey = section.name.toUpperCase();
     for (let line = section.line + 1; line <= section.endLine; line += 1) {
       const text = document.lineAt(line).text;
       const trimmed = text.trim();
@@ -554,42 +428,36 @@ function buildDocumentAnalysis(document) {
       }
 
       rowsByLine.set(line, {
-        sectionName: section.name,
-        sectionKey,
         line,
         tokens
       });
 
-      const definitionEntityType = DEFINITION_SECTION_TYPES.get(sectionKey);
-      if (!definitionEntityType) {
-        continue;
+      for (const token of tokens) {
+        if (!isIdentifierValue(token.value)) {
+          continue;
+        }
+        addOccurrence(
+          occurrenceIndex,
+          toIdentifierKey(token.value),
+          new vscode.Location(
+            document.uri,
+            new vscode.Range(line, token.start, line, token.end)
+          )
+        );
       }
-
-      const idToken = tokens[0];
-      if (!idToken || !isIdentifierValue(idToken.value)) {
-        continue;
-      }
-
-      addEntityLocation(
-        entityIndexByType,
-        definitionEntityType,
-        toIdentifierKey(idToken.value),
-        new vscode.Location(
-          document.uri,
-          new vscode.Range(line, idToken.start, line, idToken.end)
-        )
-      );
     }
   }
 
   return {
     sections,
     rowsByLine,
-    entityIndexByType
+    occurrenceIndex
   };
 }
 
 /**
+ * Return cached analysis for the current document version.
+ *
  * @param {vscode.TextDocument} document
  * @returns {DocumentAnalysis}
  */
@@ -615,88 +483,24 @@ function clearDocumentAnalysis(document) {
 }
 
 /**
- * @param {ParsedRow} row
- * @param {number} tokenIndex
- * @returns {string[]}
+ * @param {vscode.Location[]} locations
+ * @returns {vscode.Location[]}
  */
-function getReferenceEntityTypesForToken(row, tokenIndex) {
-  const sectionKey = row.sectionKey;
-  const tokens = row.tokens;
-
-  // Token positions are based on SWMM section table conventions.
-  // If no case matches, caller falls back to broad ID matching.
-  switch (sectionKey) {
-    case "CONDUITS":
-    case "PUMPS":
-    case "ORIFICES":
-    case "WEIRS":
-    case "OUTLETS":
-      if (tokenIndex === 1 || tokenIndex === 2) {
-        return [ENTITY_TYPES.NODE];
-      }
-      if (sectionKey === "PUMPS" && tokenIndex === 3) {
-        return [ENTITY_TYPES.CURVE];
-      }
-      if (sectionKey === "OUTLETS" && tokenIndex === 5) {
-        return [ENTITY_TYPES.CURVE];
-      }
-      return [];
-
-    case "SUBCATCHMENTS":
-      if (tokenIndex === 1) {
-        return [ENTITY_TYPES.RAINGAGE];
-      }
-      if (tokenIndex === 2) {
-        return [ENTITY_TYPES.NODE, ENTITY_TYPES.SUBCATCH];
-      }
-      return [];
-
-    case "SUBAREAS":
-    case "INFILTRATION":
-    case "POLYGONS":
-      return tokenIndex === 0 ? [ENTITY_TYPES.SUBCATCH] : [];
-
-    case "XSECTIONS":
-    case "LOSSES":
-    case "VERTICES":
-      return tokenIndex === 0 ? [ENTITY_TYPES.LINK] : [];
-
-    case "COORDINATES":
-    case "DWF":
-      if (tokenIndex === 0) {
-        return [ENTITY_TYPES.NODE];
-      }
-      if (sectionKey === "DWF" && tokenIndex >= 3) {
-        return [ENTITY_TYPES.PATTERN];
-      }
-      return [];
-
-    case "STORAGE":
-      if (tokenIndex === 5) {
-        const shape = normalizeIdentifier(tokens[4]?.value || "").toUpperCase();
-        if (shape === "TABULAR") {
-          return [ENTITY_TYPES.CURVE];
-        }
-      }
-      return [];
-
-    case "OUTFALLS":
-      return tokenIndex === 5 ? [ENTITY_TYPES.NODE] : [];
-
-    case "TAGS":
-      if (tokenIndex !== 1) {
-        return [];
-      }
-      const tagType = normalizeIdentifier(tokens[0]?.value || "").toUpperCase();
-      const entityType = TAG_TYPE_TO_ENTITY_TYPE.get(tagType);
-      return entityType ? [entityType] : [];
-
-    default:
-      return [];
-  }
+function uniqueLocations(locations) {
+  const seen = new Set();
+  return locations.filter((location) => {
+    const key = `${location.uri.toString()}:${location.range.start.line}:${location.range.start.character}:${location.range.end.character}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 /**
+ * Build column-color ranges for the active document.
+ *
  * @param {number} paletteSize
  * @param {vscode.TextDocument} document
  * @returns {vscode.Range[][]}
@@ -723,8 +527,6 @@ function buildRainbowRanges(paletteSize, document) {
     /** @type {{start: number, end: number}[]} */
     let tokens = [];
     if (headerCommentLines.has(line)) {
-      // For ";;Name   From Node   To Node" style lines, tokenization uses
-      // 2+ spaces as separators to preserve multi-word header labels.
       const header = stripLeadingCommentMarker(original);
       tokens = tokenizeHeaderColumns(header.content).map((token) => ({
         start: token.start + header.offset,
@@ -908,6 +710,7 @@ function activate(context) {
       new SwmmDefinitionProvider()
     )
   );
+
   // User-facing commands.
   context.subscriptions.push(
     vscode.commands.registerCommand("swmmInp.goToSection", goToSection)

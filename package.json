@@ -1,7 +1,7 @@
 {
   "name": "swmm-inp-inspector",
   "displayName": "SWMM INP Inspector",
-  "description": "Inspect SWMM .inp files with sticky section headers, rainbow columns, and Ctrl+click relation navigation.",
+  "description": "Inspect SWMM .inp files with sticky section headers, rainbow columns, and Ctrl/Cmd+click peek of all identifier occurrences.",
   "version": "0.1.0",
   "publisher": "ruozhou",
   "author": "Ruozhou Lin",
@@ -91,7 +91,9 @@
     "configurationDefaults": {
       "[swmm-inp]": {
         "editor.stickyScroll.enabled": true,
-        "editor.stickyScroll.maxLineCount": 8
+        "editor.stickyScroll.maxLineCount": 8,
+        "editor.definitionLinkOpensInPeek": true,
+        "editor.gotoLocation.multipleDefinitions": "peek"
       }
     }
   }
