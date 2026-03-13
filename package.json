@@ -65,23 +65,23 @@
             "type": "string"
           },
           "default": [
-            "rgba(255, 99, 132, 0.20)",
-            "rgba(255, 159, 64, 0.20)",
-            "rgba(255, 205, 86, 0.20)",
-            "rgba(75, 192, 192, 0.20)",
-            "rgba(54, 162, 235, 0.20)",
-            "rgba(153, 102, 255, 0.20)",
-            "rgba(0, 200, 83, 0.20)",
-            "rgba(201, 203, 207, 0.20)"
+            "#E06C75",
+            "#D19A66",
+            "#E5C07B",
+            "#98C379",
+            "#56B6C2",
+            "#61AFEF",
+            "#C678DD",
+            "#ABB2BF"
           ],
-          "description": "Background colors used for rainbow column highlighting. Colors are applied by column index modulo palette length."
+          "description": "Text colors used for rainbow column highlighting. Colors are applied by column index modulo palette length."
         }
       }
     },
     "configurationDefaults": {
       "[swmm-inp]": {
         "editor.stickyScroll.enabled": true,
-        "editor.stickyScroll.maxLineCount": 1
+        "editor.stickyScroll.maxLineCount": 8
       }
     }
   }

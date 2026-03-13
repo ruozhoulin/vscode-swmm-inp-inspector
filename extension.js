@@ -1,15 +1,16 @@
 const vscode = require("vscode");
 
 const SECTION_PATTERN = /^\s*\[([^\]]+)\]\s*$/;
+const COMMENT_PATTERN = /^\s*;/;
 const DEFAULT_PALETTE = [
-  "rgba(255, 99, 132, 0.20)",
-  "rgba(255, 159, 64, 0.20)",
-  "rgba(255, 205, 86, 0.20)",
-  "rgba(75, 192, 192, 0.20)",
-  "rgba(54, 162, 235, 0.20)",
-  "rgba(153, 102, 255, 0.20)",
-  "rgba(0, 200, 83, 0.20)",
-  "rgba(201, 203, 207, 0.20)"
+  "#E06C75",
+  "#D19A66",
+  "#E5C07B",
+  "#98C379",
+  "#56B6C2",
+  "#61AFEF",
+  "#C678DD",
+  "#ABB2BF"
 ];
 
 /** @type {vscode.TextEditorDecorationType[]} */
@@ -24,19 +25,7 @@ class SwmmSectionSymbolProvider {
    */
   provideDocumentSymbols(document) {
     const sections = parseSections(document);
-    return sections.map((section) => {
-      const headingText = document.lineAt(section.line).text;
-      const endText = document.lineAt(section.endLine).text;
-      const selectionRange = new vscode.Range(section.line, 0, section.line, headingText.length);
-      const range = new vscode.Range(section.line, 0, section.endLine, endText.length);
-      return new vscode.DocumentSymbol(
-        section.name,
-        `Line ${section.line + 1}`,
-        vscode.SymbolKind.Namespace,
-        range,
-        selectionRange
-      );
-    });
+    return sections.map((section) => createSectionSymbol(document, section));
   }
 }
 
@@ -60,14 +49,21 @@ class SwmmSectionFoldingProvider {
 }
 
 /**
+ * @typedef {{
+ *   name: string,
+ *   line: number,
+ *   endLine: number,
+ *   headerCommentLines: number[]
+ * }} SectionInfo
+ */
+
+/**
  * @param {vscode.TextDocument} document
- * @returns {{name: string, line: number, endLine: number}[]}
+ * @returns {SectionInfo[]}
  */
 function parseSections(document) {
-  /** @type {{name: string, line: number, endLine: number}[]} */
+  /** @type {SectionInfo[]} */
   const sections = [];
-  /** @type {{name: string, line: number, endLine: number} | undefined} */
-  let current;
 
   for (let line = 0; line < document.lineCount; line += 1) {
     const text = document.lineAt(line).text;
@@ -75,23 +71,98 @@ function parseSections(document) {
     if (!match) {
       continue;
     }
-    if (current) {
-      current.endLine = line - 1;
-      sections.push(current);
-    }
-    current = {
+    sections.push({
       name: match[1].trim(),
       line,
-      endLine: line
-    };
+      endLine: document.lineCount - 1,
+      headerCommentLines: []
+    });
   }
 
-  if (current) {
-    current.endLine = document.lineCount - 1;
-    sections.push(current);
-  }
+  sections.forEach((section, index) => {
+    const next = sections[index + 1];
+    section.endLine = next ? next.line - 1 : document.lineCount - 1;
+    section.headerCommentLines = getHeaderCommentLines(document, section);
+  });
 
   return sections;
+}
+
+/**
+ * @param {vscode.TextDocument} document
+ * @param {SectionInfo} section
+ * @returns {number[]}
+ */
+function getHeaderCommentLines(document, section) {
+  /** @type {number[]} */
+  const lines = [];
+
+  for (let line = section.line + 1; line <= section.endLine; line += 1) {
+    const text = document.lineAt(line).text;
+    if (!COMMENT_PATTERN.test(text)) {
+      break;
+    }
+    lines.push(line);
+  }
+
+  return lines;
+}
+
+/**
+ * @param {vscode.TextDocument} document
+ * @param {SectionInfo} section
+ * @returns {vscode.DocumentSymbol}
+ */
+function createSectionSymbol(document, section) {
+  const headingText = document.lineAt(section.line).text;
+  const endText = document.lineAt(section.endLine).text;
+  const sectionSelectionRange = new vscode.Range(
+    section.line,
+    0,
+    section.line,
+    headingText.length
+  );
+  const sectionRange = new vscode.Range(
+    section.line,
+    0,
+    section.endLine,
+    endText.length
+  );
+  const sectionSymbol = new vscode.DocumentSymbol(
+    section.name,
+    `Line ${section.line + 1}`,
+    vscode.SymbolKind.Namespace,
+    sectionRange,
+    sectionSelectionRange
+  );
+
+  let parent = sectionSymbol;
+  for (const commentLine of section.headerCommentLines) {
+    const commentText = document.lineAt(commentLine).text;
+    const commentSelectionRange = new vscode.Range(
+      commentLine,
+      0,
+      commentLine,
+      commentText.length
+    );
+    const commentRange = new vscode.Range(
+      commentLine,
+      0,
+      section.endLine,
+      endText.length
+    );
+    const commentSymbol = new vscode.DocumentSymbol(
+      commentText.trim() || ";",
+      `Line ${commentLine + 1}`,
+      vscode.SymbolKind.String,
+      commentRange,
+      commentSelectionRange
+    );
+    parent.children.push(commentSymbol);
+    parent = commentSymbol;
+  }
+
+  return sectionSymbol;
 }
 
 /**
@@ -117,12 +188,52 @@ function stripInlineComment(line) {
 
 /**
  * @param {string} line
+ * @returns {{offset: number, content: string}}
+ */
+function stripLeadingCommentMarker(line) {
+  const match = line.match(/^(\s*;+\s*)(.*)$/);
+  if (!match) {
+    return {
+      offset: 0,
+      content: line
+    };
+  }
+  return {
+    offset: match[1].length,
+    content: match[2]
+  };
+}
+
+/**
+ * @param {string} line
  * @returns {{start: number, end: number}[]}
  */
 function tokenizeColumns(line) {
   /** @type {{start: number, end: number}[]} */
   const tokens = [];
   const matcher = /"[^"]*"|\S+/g;
+  let match = matcher.exec(line);
+
+  while (match) {
+    tokens.push({
+      start: match.index,
+      end: match.index + match[0].length
+    });
+    match = matcher.exec(line);
+  }
+
+  return tokens;
+}
+
+/**
+ * Tokenize table header comment lines where labels are separated by 2+ spaces.
+ * @param {string} line
+ * @returns {{start: number, end: number}[]}
+ */
+function tokenizeHeaderColumns(line) {
+  /** @type {{start: number, end: number}[]} */
+  const tokens = [];
+  const matcher = /\S(?:.*?\S)?(?=\s{2,}|$)/g;
   let match = matcher.exec(line);
 
   while (match) {
@@ -144,20 +255,38 @@ function tokenizeColumns(line) {
 function buildRainbowRanges(paletteSize, document) {
   /** @type {vscode.Range[][]} */
   const rangesByColor = Array.from({ length: paletteSize }, () => []);
+  const sections = parseSections(document);
+  const headerCommentLines = new Set(
+    sections.flatMap((section) => section.headerCommentLines)
+  );
 
   for (let line = 0; line < document.lineCount; line += 1) {
     const original = document.lineAt(line).text;
     const trimmed = original.trim();
 
-    if (!trimmed || trimmed.startsWith(";")) {
+    if (!trimmed) {
       continue;
     }
     if (SECTION_PATTERN.test(trimmed)) {
       continue;
     }
 
-    const content = stripInlineComment(original);
-    const tokens = tokenizeColumns(content);
+    /** @type {{start: number, end: number}[]} */
+    let tokens = [];
+    if (headerCommentLines.has(line)) {
+      const header = stripLeadingCommentMarker(original);
+      tokens = tokenizeHeaderColumns(header.content).map((token) => ({
+        start: token.start + header.offset,
+        end: token.end + header.offset
+      }));
+    } else {
+      if (COMMENT_PATTERN.test(trimmed)) {
+        continue;
+      }
+      const content = stripInlineComment(original);
+      tokens = tokenizeColumns(content);
+    }
+
     if (!tokens.length) {
       continue;
     }
@@ -213,8 +342,7 @@ function recreateDecorationTypes() {
   const palette = getPalette();
   decorationTypes = palette.map((color) =>
     vscode.window.createTextEditorDecorationType({
-      backgroundColor: color,
-      borderRadius: "2px"
+      color
     })
   );
 }

@@ -4,9 +4,9 @@ A lightweight VS Code extension for inspecting Storm Water Management Model (`.i
 
 ## Features
 
-- Sticky section context: section headings like `[SUBCATCHMENTS]` are exposed as document symbols so VS Code Sticky Scroll can pin the current section while you scroll.
+- Sticky section context: section headings like `[SUBCATCHMENTS]` and the consecutive comment header lines right under them are exposed to Sticky Scroll so section meaning stays visible while you scroll.
 - Fast section navigation: run `SWMM INP: Go to Section` from Command Palette to jump to any section.
-- Rainbow columns: table-like rows are tokenized by whitespace and highlighted by column index (similar to Rainbow CSV).
+- Rainbow columns: table-like rows are tokenized by column index (similar to Rainbow CSV) and highlighted with text colors (not background fills). Section header comment rows are included.
 
 ## Usage
 
@@ -26,5 +26,5 @@ If VS Code prompts about debugging `Plain Text`, ensure this workspace is opened
 
 ## Notes
 
-- This extension sets language defaults for `[swmm-inp]` to enable sticky scroll and keep one sticky line.
-- Comment lines starting with `;`, blank lines, and section heading lines are excluded from rainbow highlighting.
+- This extension sets language defaults for `[swmm-inp]` to enable sticky scroll with up to 8 sticky lines.
+- Consecutive comment lines (`;...`) immediately below a section heading are treated as header context and can be colored with rainbow columns.
