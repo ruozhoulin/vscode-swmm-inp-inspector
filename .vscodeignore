@@ -8,4 +8,5 @@ prompt.md
 *.log
 coverage/**
 dist/**
+inp/**
 out/**
