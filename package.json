@@ -1,0 +1,88 @@
+{
+  "name": "swmm-inp-inspector",
+  "displayName": "SWMM INP Inspector",
+  "description": "Section-aware navigation, sticky context, and rainbow columns for SWMM .inp files.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.86.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:swmm-inp",
+    "onCommand:swmmInp.goToSection",
+    "onCommand:swmmInp.refreshRainbowColumns"
+  ],
+  "main": "./extension.js",
+  "scripts": {
+    "check": "node --check extension.js"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "swmm-inp",
+        "aliases": [
+          "SWMM INP",
+          "swmm-inp"
+        ],
+        "extensions": [
+          ".inp"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "swmm-inp",
+        "scopeName": "source.swmm-inp",
+        "path": "./syntaxes/swmm-inp.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "swmmInp.goToSection",
+        "title": "SWMM INP: Go to Section"
+      },
+      {
+        "command": "swmmInp.refreshRainbowColumns",
+        "title": "SWMM INP: Refresh Rainbow Columns"
+      }
+    ],
+    "configuration": {
+      "title": "SWMM INP Inspector",
+      "properties": {
+        "swmmInp.enableRainbowColumns": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable rainbow-style column highlighting for SWMM INP table rows."
+        },
+        "swmmInp.rainbowPalette": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "rgba(255, 99, 132, 0.20)",
+            "rgba(255, 159, 64, 0.20)",
+            "rgba(255, 205, 86, 0.20)",
+            "rgba(75, 192, 192, 0.20)",
+            "rgba(54, 162, 235, 0.20)",
+            "rgba(153, 102, 255, 0.20)",
+            "rgba(0, 200, 83, 0.20)",
+            "rgba(201, 203, 207, 0.20)"
+          ],
+          "description": "Background colors used for rainbow column highlighting. Colors are applied by column index modulo palette length."
+        }
+      }
+    },
+    "configurationDefaults": {
+      "[swmm-inp]": {
+        "editor.stickyScroll.enabled": true,
+        "editor.stickyScroll.maxLineCount": 1
+      }
+    }
+  }
+}

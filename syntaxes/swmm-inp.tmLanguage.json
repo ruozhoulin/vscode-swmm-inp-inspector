@@ -1,0 +1,20 @@
+{
+  "name": "SWMM INP",
+  "scopeName": "source.swmm-inp",
+  "patterns": [
+    {
+      "name": "entity.name.section.swmm-inp",
+      "match": "^\\s*\\[[^\\]]+\\]\\s*$"
+    },
+    {
+      "name": "comment.line.semicolon.swmm-inp",
+      "match": "^\\s*;.*$"
+    },
+    {
+      "name": "string.quoted.double.swmm-inp",
+      "begin": "\"",
+      "end": "\""
+    }
+  ],
+  "repository": {}
+}
