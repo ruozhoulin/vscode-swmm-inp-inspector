@@ -66,11 +66,12 @@ class SwmmSectionFoldingProvider {
 }
 
 /**
- * Returns all in-file occurrences of the clicked identifier.
+ * Returns in-file occurrences of the clicked identifier, excluding
+ * the currently clicked line.
  *
  * VS Code can present multiple returned definition locations in a Peek panel.
- * We intentionally return all occurrences of the same token key, not only a
- * single "definition" line, to support investigation of repeated references.
+ * We intentionally return repeated references of the same token key, not only
+ * a single "definition" line, to support investigation across the file.
  */
 class SwmmDefinitionProvider {
   /**
@@ -98,7 +99,14 @@ class SwmmDefinitionProvider {
       return undefined;
     }
 
-    return locations;
+    const locationsExcludingCurrentLine = locations.filter(
+      (location) => location.range.start.line !== position.line
+    );
+    if (!locationsExcludingCurrentLine.length) {
+      return undefined;
+    }
+
+    return locationsExcludingCurrentLine;
   }
 }
 
